@@ -13,6 +13,14 @@ sdist
 develop-eggs
 .installed.cfg
 
+# IDE-related files and dirs
+__pycache__
+.ropeproject
+.eric5project
+.ninjaproject
+*.e4p
+*.nja
+
 # Installer logs
 pip-log.txt
 
@@ -25,3 +33,6 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+#Config file
+settings.ini
