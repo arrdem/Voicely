@@ -41,6 +41,7 @@ Options:
     -v, --version     show program version and exit
     -h, --help        show this help message and exit
     -c, --config dir  use a nonstandard config file location
+    -dbg              enable some debugging printing
 
 About:
     Voicely version {0}, a highly configurable voice command interface for
@@ -125,16 +126,15 @@ class Voicely(object):
     def final_result(self, hyp, uttid):
         if(self.dbg):
             print ("final: %s" % hyp)
-        prog = ''
-        command = None
+
+        val = None
         if self.dial is not None:
             if hyp == 'YES':
                 self.dial.response(gtk.RESPONSE_YES)
             else:
                 self.dial.response(gtk.RESPONSE_NO)
         elif hyp in self.config:
-            prog = self.config[hyp]['cmd']
-            command = hyp
+            val = self.config[hyp]
         #else:
             #values = hyp.split(' ')
             #if len(values) <= 1:
@@ -145,11 +145,14 @@ class Voicely(object):
             #else:
                 #for value in values:
                     #self.final_result(value, 0)
-        if prog:
+        if val:
             if(self.dbg):
-                print "command is %s" % command
+                print "command is %s" % val['cmd']
 
-            Popen(prog, shell=True)
+            if 'msg' in val:
+                print "[COMMAND DEBUG]", val['msg']
+
+            Popen(val['cmd'], shell=True)
 
     def confirm(self, prog):
         if(self.dbg):
@@ -175,7 +178,11 @@ class Voicely(object):
 
 def corpus(config):
     words = set(config.keys())
-    words.remove('__settings__')
+    if '__settings__' in words:
+        words.remove('__settings__')
+        if 'keyphrase' in config['__settings__']:
+            words.add(config['__settings__']['keyphrase'])
+
     corpusText = "\n".join(words)
     filename = os.path.join(os.getcwd(), 'corpus.txt')
     corp = open(filename, 'w')
@@ -187,7 +194,7 @@ def corpus(config):
     print """Now visit http://www.speech.cs.cmu.edu/tools/lmtool.html
   ==> choose the corpus file, click COMPILE KNOWLEDGE BASE"
   ==> save the three files to ~/.config/Voicely/"
-  ==> edit ~/.config/Voicely/Voicelyconf.py and set the lang field of the
+  ==> edit ~/.config/voicely/voicely.conf and set the lang field of the
       __settings__ section to the appropriate value - e.g. if the files are
       named 4766.dic, 4766.lm and 4766.sent, set lang = 4766"""
 
@@ -198,13 +205,18 @@ if __name__ == '__main__':
     config_data = None
 
     c_flag = False
+    c_dbg_flag = False
     for opt in sys.argv[1:]:
         if c_flag:
             c_flag = False
 
             if(os.path.exists(opt) and os.path.isdir(opt)):
                 config_dir = opt
+
+                if opt[-1] != os.sep:
+                    config_dir += os.sep
                 continue
+
             else:
                 print ("[FATAL] Specified config dir does not exist")
                 exit(2)
@@ -219,6 +231,9 @@ if __name__ == '__main__':
 
         elif opt in ('-c', '--config'):
             c_flag = True
+
+        elif opt in ('-dbg'):
+            c_dbg_flag = True
 
         else:
             print ("[WARNING] Unknown option %s" % opt)
@@ -253,7 +268,7 @@ if __name__ == '__main__':
         # the config file is '~/.config/Voicely/Voicely.conf'
 
         hf = config_dir + 'hash'
-        cf = config_dir + 'Voicely.conf'
+        cf = config_dir + config_file
 
         hash = md5.new()
         hf_data = open(hf).read() if os.path.exists(hf) else ""
@@ -262,7 +277,18 @@ if __name__ == '__main__':
         a = ConfigParser()
         a.read(cf)
 
-        config_data = {b: dict(a.items(b)) for b in a.sections()}
+        config_data = None
+
+        if a.getboolean('__settings__', 'use_keyphrase'):
+            ph = a.get('__settings__', 'keyphrase').upper()
+            config_data = {(ph + " " + b.upper() if b != '__settings__' else b): dict(a.items(b)) for b in a.sections()}
+
+            if c_dbg_flag:
+                for k in config_data:
+                    print k, config_data[k]
+
+        else:
+            config_data = {b.upper(): dict(a.items(b)) for b in a.sections()}
 
         if(hash.hexdigest() != hf_data):
             print __hash_not_found__
@@ -282,5 +308,5 @@ if __name__ == '__main__':
         config_data['lm'] = '{0}.lm'.format(language_file)
         config_data['dict'] = '{0}.dic'.format(language_file)
 
-    app = Voicely(config_data)
+    app = Voicely(config_data, dbg=c_dbg_flag)
     gtk.main()
